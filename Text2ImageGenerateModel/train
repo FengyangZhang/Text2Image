@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=1 python runtime.py --save_path /zf18/fz2ds/Text2Image/Text2ImageGenerateModel/trained_weights/
