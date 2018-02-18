@@ -26,6 +26,7 @@ train = f.create_group('train')
 valid = f.create_group('valid')
 test = f.create_group('test')
 
+# To generate my own dataset
 for _class in sorted(os.listdir(embedding_path)):
 	_class = _class[:-3]
 	split = ''
@@ -67,12 +68,13 @@ for _class in sorted(os.listdir(embedding_path)):
 		for c, e in enumerate(embedding):
 			ex = split.create_group(example_name + '_' + str(c))
 			ex.create_dataset('name', data=example_name)
-                        ex.create_dataset('img', data=np.void(img[c]))
+                        ex.create_dataset('img', data=np.void(img[c].tobytes()))
                         ex.create_dataset('embeddings', data=e)
                         ex.create_dataset('class', data=_class)
                         ex.create_dataset('txt', data=txt[c].astype(object), dtype=dt)
 		print(example_name, txt, _class)
 
+#The author's way
 #	for example, txt_file in zip(sorted(glob(data_path + "/*.t7")), sorted(glob(txt_path + "/*.txt"))):
 #		example_data = load_lua(example)
 #		img_path = example_data['img']

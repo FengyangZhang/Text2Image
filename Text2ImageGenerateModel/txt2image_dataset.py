@@ -38,9 +38,9 @@ class Text2ImageDataset(Dataset):
 
         # pdb.set_trace()
 
-        right_image = bytes(np.array(example['img']))
+        right_image = np.array(example['img']).tobytes()
         right_embed = np.array(example['embeddings'], dtype=float)
-        wrong_image = bytes(np.array(self.find_wrong_image(example['class'])))
+        wrong_image = np.array(self.find_wrong_image(example['class'])).tobytes()
         inter_embed = np.array(self.find_inter_embed())
 
         right_image = Image.open(io.BytesIO(right_image)).resize((64, 64))

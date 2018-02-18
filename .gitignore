@@ -1,2 +1,4 @@
 *.hdf5
 flowers/
+.DS_Store
+trained_weights/
