@@ -2,7 +2,9 @@
 
 ## Intoduction
 
-This is a pytorch implementation of [Generative Adversarial Text-to-Image Synthesis paper](https://arxiv.org/abs/1605.05396), we train a conditional generative adversarial network, conditioned on text descriptions, to generate images that correspond to the description. The network architecture is shown below (Image from [1]). This architecture is based on DCGAN.
+This is a pytorch implementation of [Generative Adversarial Text-to-Image Synthesis paper](https://arxiv.org/abs/1605.05396), we train a conditional generative adversarial network, conditioned on text descriptions, to generate images that correspond to the description. The basic network architecture is shown below (Image from [1]). 
+
+The code and this README is hugely based on [aelnouby](https://github.com/aelnouby/Text-to-Image-Synthesis)'s implementation.
 
 <figure><img src='images/pipeline.png'></figure>
 Image credits [1]
@@ -20,6 +22,9 @@ This implementation currently only support running with GPUs.
 ## Implementation details
 
 This implementation follows the Generative Adversarial Text-to-Image Synthesis paper [1], however it works more on training stablization and preventing mode collapses by implementing:
+- Perceptual Loss using gram matrix (not implemented)
+- Quantitative evaluation using classification and detection model (not implemented)
+- Other things to make the model better on more difficult datasets (not implemented)
 - Feature matching [2]
 - One sided label smoothing [2]
 - minibatch discrimination [2] (implemented but not used)
