@@ -171,6 +171,7 @@ class Trainer(object):
         criterion = nn.BCELoss()
         l2_loss = nn.MSELoss()
         l1_loss = nn.L1Loss()
+
         iteration = 0
 
         for epoch in range(self.num_epochs):
@@ -231,8 +232,16 @@ class Trainer(object):
                 outputs, activation_fake = self.discriminator(fake_images, right_embed)
                 _, activation_real = self.discriminator(right_images, right_embed)
 
+
                 activation_fake = torch.mean(activation_fake, 0)
                 activation_real = torch.mean(activation_real, 0)
+
+                # calculate gram matrix
+                gram_fake = torch.mm(activation_fake.view(activation_fake.shape[0], -1),  \
+                    activation_fake.view(activation_fake.shape[0], -1).tranpose(1, 0))
+
+                gram_real = torch.mm(activation_real.view(activation_real.shape[0], -1),  \
+                    activation_real.view(activation_real.shape[0], -1).tranpose(1, 0))
 
 
                 #======= Generator Loss function============
@@ -242,14 +251,17 @@ class Trainer(object):
                 # The third term is L1 distance between the generated and real images, this is helpful for the conditional case
                 # because it links the embedding feature vector directly to certain pixel values.
                 #===========================================
+                percept_loss = self.l2_coef * l2_loss(gram_fake, gram_real.detach())
                 g_loss = criterion(outputs, real_labels) \
                          + self.l2_coef * l2_loss(activation_fake, activation_real.detach()) \
                          + self.l1_coef * l1_loss(fake_images, right_images)
+                         + percept_loss
 
                 g_loss.backward()
                 self.optimG.step()
 
                 if iteration % 5 == 0:
+                    print("TEST only: Perceptual(Gram) loss: %f" % (percept_loss))
                     self.logger.log_iteration_gan(epoch,d_loss, g_loss, real_score, fake_score)
                     self.logger.draw(right_images, fake_images)
 
