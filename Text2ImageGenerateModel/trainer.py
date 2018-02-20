@@ -238,10 +238,10 @@ class Trainer(object):
 
                 # calculate gram matrix
                 gram_fake = torch.mm(activation_fake.view(activation_fake.shape[0], -1),  \
-                    activation_fake.view(activation_fake.shape[0], -1).tranpose(1, 0))
+                    activation_fake.view(activation_fake.shape[0], -1).transpose(1, 0))
 
                 gram_real = torch.mm(activation_real.view(activation_real.shape[0], -1),  \
-                    activation_real.view(activation_real.shape[0], -1).tranpose(1, 0))
+                    activation_real.view(activation_real.shape[0], -1).transpose(1, 0))
 
 
                 #======= Generator Loss function============
@@ -254,14 +254,13 @@ class Trainer(object):
                 percept_loss = self.l2_coef * l2_loss(gram_fake, gram_real.detach())
                 g_loss = criterion(outputs, real_labels) \
                          + self.l2_coef * l2_loss(activation_fake, activation_real.detach()) \
-                         + self.l1_coef * l1_loss(fake_images, right_images)
+                         + self.l1_coef * l1_loss(fake_images, right_images) \
                          + percept_loss
 
                 g_loss.backward()
                 self.optimG.step()
 
                 if iteration % 5 == 0:
-                    print("TEST only: Perceptual(Gram) loss: %f" % (percept_loss))
                     self.logger.log_iteration_gan(epoch,d_loss, g_loss, real_score, fake_score)
                     self.logger.draw(right_images, fake_images)
 
