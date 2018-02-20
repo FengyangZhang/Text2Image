@@ -24,9 +24,9 @@ class Validation(object):
             self.generator.apply(Utils.weights_init)
 
         if dataset == 'birds':
-            self.dataset = Text2ImageDataset(config['birds_dataset_path'], split=split)
+            self.dataset = Text2ImageDataset(config['birds_dataset_path'], split=1)
         elif dataset == 'flowers':
-            self.dataset = Text2ImageDataset(config['flowers_val_dataset_path'], split=split)
+            self.dataset = Text2ImageDataset(config['flowers_val_dataset_path'], split=1)
         else:
             print('Dataset not supported, please select either birds or flowers.')
             exit()
@@ -43,27 +43,28 @@ class Validation(object):
         self.type = type
 
     def validate(self):
-        for sample in data_loader:
-            right_images = sample['right_images']
-            right_embed = sample['right_embed']
-            txt = sample['txt']
+	for epoch in range(self.num_epochs):
+            for sample in self.data_loader:
+                right_images = sample['right_images']
+                right_embed = sample['right_embed']
+                txt = sample['txt']
 
 
-            if not os.path.exists('val_results/{0}'.format(self.save_path)):
-                os.makedirs('val_results/{0}'.format(self.save_path))
+                if not os.path.exists('val_results/'):
+                    os.makedirs('val_results/')
 
-            right_images = Variable(right_images.float()).cuda()
-            right_embed = Variable(right_embed.float()).cuda()
+                right_images = Variable(right_images.float()).cuda()
+                right_embed = Variable(right_embed.float()).cuda()
 
-            # Get generated images
-            noise = Variable(torch.randn(right_images.size(0), 100)).cuda()
-            noise = noise.view(noise.size(0), 100, 1, 1)
-            fake_images = self.generator(right_embed, noise)
+                # Get generated images
+                noise = Variable(torch.randn(right_images.size(0), 100)).cuda()
+                noise = noise.view(noise.size(0), 100, 1, 1)
+                fake_images = self.generator(right_embed, noise)
 
-            self.logger.draw(right_images, fake_images)
+                self.logger.draw(right_images, fake_images)
 
-            for image, t in zip(fake_images, txt):
-                im = Image.fromarray(image.data.mul_(127.5).add_(127.5).byte().permute(1, 2, 0).cpu().numpy())
-                im.save('results/{0}/{1}.jpg'.format(self.save_path, t.replace("/", "")[:100]))
-                print(t)
+                for image, t in zip(fake_images, txt):
+                    im = Image.fromarray(image.data.mul_(127.5).add_(127.5).byte().permute(1, 2, 0).cpu().numpy())
+                    im.save('val_results/{1}_{0}.jpg'.format(t.replace("/", "")[:100], epoch))
+	    print('VALIDATION: %d epoch' %(epoch))
 

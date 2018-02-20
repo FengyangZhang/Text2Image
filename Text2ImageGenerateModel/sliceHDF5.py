@@ -7,7 +7,7 @@ num = 3
 in_file = 'flowers.hdf5'
 out_file = 'flowers_val.hdf5'
 in_group = 'test'
-out_group = 'val'
+out_group = 'valid'
 
 fi = h5py.File(in_file)[in_group]
 fo = h5py.File(out_file)
