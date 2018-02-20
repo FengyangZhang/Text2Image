@@ -1,2 +1,4 @@
 CUDA_VISIBLE_DEVICES=1 python runtime.py --save_path /zf18/fz2ds/Text2Image/Text2ImageGenerateModel/trained_weights/
 CUDA_VISIBLE_DEVICES=1 python runtime.py --inference True --pre_trained_gen trained_weights/gen_190.pth
+
+CUDA_VISIBLE_DEVICES=1 python runtime.py --save_path /zf18/fz2ds/Text2Image/Text2ImageGenerateModel/trained_weights/ --pre_trained_disc trained_weights/disc_40.pth --pre_trained_gen trained_weights/gen_40.pth
