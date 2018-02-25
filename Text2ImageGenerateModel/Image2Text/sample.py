@@ -28,6 +28,7 @@ def load_image(image_path, transform=None):
 def main(args):
     # Image preprocessing
     transform = transforms.Compose([
+        transforms.Resize((256, 256)),
         transforms.ToTensor(), 
         transforms.Normalize((0.485, 0.456, 0.406), 
                              (0.229, 0.224, 0.225))])
@@ -79,11 +80,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--image', type=str, required=True,
                         help='input image for generating caption')
-    parser.add_argument('--encoder_path', type=str, default='./models/encoder-5-3000.pkl',
+    parser.add_argument('--encoder_path', type=str, default='./models/encoder-50-200.pkl',
                         help='path for trained encoder')
-    parser.add_argument('--decoder_path', type=str, default='./models/decoder-5-3000.pkl',
+    parser.add_argument('--decoder_path', type=str, default='./models/decoder-50-200.pkl',
                         help='path for trained decoder')
-    parser.add_argument('--vocab_path', type=str, default='./data/vocab.pkl',
+    parser.add_argument('--vocab_path', type=str, default='/zf18/fz2ds/Text2Image/Text2ImageGenerateModel/flowers_processed/vocab.pkl',
                         help='path for vocabulary wrapper')
     
     # Model parameters (should be same as paramters in train.py)
