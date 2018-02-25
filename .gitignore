@@ -3,3 +3,6 @@ flowers/
 .DS_Store
 trained_weights/
 val_results/
+Image2Text/models
+flowers_processed/
+flowers_raw/
