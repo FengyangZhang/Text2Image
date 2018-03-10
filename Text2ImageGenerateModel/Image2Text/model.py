@@ -47,10 +47,14 @@ class DecoderRNN(nn.Module):
         
     def forward(self, features, captions, lengths):
         """Decode image feature vectors and generates captions."""
+    # embed the captions, output will be (batch_size, max_batch_length, feature_size)
         embeddings = self.embed(captions)
+    # cat the image feature with the second dim of embeddings.
         embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
+    # packed[0] will be of (batch_captions_length(without padding), feature_size)
         packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
         hiddens, _ = self.lstm(packed)
+    # outputs will be of (batch_captions_length(without padding), vocab_size)
         outputs = self.linear(hiddens[0])
         return outputs
     
@@ -61,9 +65,11 @@ class DecoderRNN(nn.Module):
         for i in range(20):                                      # maximum sampling length
             hiddens, states = self.lstm(inputs, states)          # (batch_size, 1, hidden_size), 
             outputs = self.linear(hiddens.squeeze(1))            # (batch_size, vocab_size)
+            # get the index of the greatest value
             predicted = outputs.max(1)[1]
             sampled_ids.append(predicted)
             inputs = self.embed(predicted)
             inputs = inputs.unsqueeze(1)                         # (batch_size, 1, embed_size)
+        # this is to convert list of Tensor to list of integers.
         sampled_ids = torch.cat(sampled_ids, 0)                  # (batch_size, 20)
         return sampled_ids.squeeze()
