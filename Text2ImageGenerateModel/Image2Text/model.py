@@ -3,6 +3,8 @@ import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
 from torch.autograd import Variable
+from torch.distributions import Categorical
+import torch.nn.functional as F
 
 
 class EncoderCNN(nn.Module):
@@ -45,18 +47,21 @@ class DecoderRNN(nn.Module):
         self.linear.weight.data.uniform_(-0.1, 0.1)
         self.linear.bias.data.fill_(0)
         
-    def forward(self, features, captions, lengths):
+    def forward(self, features, captions, lengths, use_policy):
         """Decode image feature vectors and generates captions."""
-    # embed the captions, output will be (batch_size, max_batch_length, feature_size)
-        embeddings = self.embed(captions)
-    # cat the image feature with the second dim of embeddings.
-        embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
-    # packed[0] will be of (batch_captions_length(without padding), feature_size)
-        packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
-        hiddens, _ = self.lstm(packed)
-    # outputs will be of (batch_captions_length(without padding), vocab_size)
-        outputs = self.linear(hiddens[0])
-        return outputs
+	if(not use_policy):
+    	    # embed the captions, output will be (batch_size, max_batch_length, feature_size)
+            embeddings = self.embed(captions)
+    	    # cat the image feature with the second dim of embeddings.
+            embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
+    	    # packed[0] will be of (batch_captions_length(without padding), feature_size)
+            packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
+            hiddens, _ = self.lstm(packed)
+   	    # outputs will be of (batch_captions_length(without padding), vocab_size)
+            outputs = self.linear(hiddens[0])
+            return outputs
+	else:
+	    return None
     
     def sample(self, features, states=None):
         """Samples captions for given image features (Greedy search)."""
@@ -65,8 +70,14 @@ class DecoderRNN(nn.Module):
         for i in range(20):                                      # maximum sampling length
             hiddens, states = self.lstm(inputs, states)          # (batch_size, 1, hidden_size), 
             outputs = self.linear(hiddens.squeeze(1))            # (batch_size, vocab_size)
-            # get the index of the greatest value
-            predicted = outputs.max(1)[1]
+
+            # Method 1: get the index of the greatest value
+            # predicted = outputs.max(1)[1]
+	    # Method 2: Sampling from the distribution
+	    outputs = F.softmax(outputs, dim=1)
+            dist = Categorical(outputs)
+   	    predicted = dist.sample()
+
             sampled_ids.append(predicted)
             inputs = self.embed(predicted)
             inputs = inputs.unsqueeze(1)                         # (batch_size, 1, embed_size)

@@ -1,5 +1,5 @@
 import torch
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import numpy as np 
 import argparse
 import pickle 
@@ -28,7 +28,6 @@ def load_image(image_path, transform=None):
 def main(args):
     # Image preprocessing
     transform = transforms.Compose([
-        transforms.Resize((256, 256)),
         transforms.ToTensor(), 
         transforms.Normalize((0.485, 0.456, 0.406), 
                              (0.229, 0.224, 0.225))])
@@ -73,16 +72,16 @@ def main(args):
     
     # Print out image and generated caption.
     print (sentence)
-    image = Image.open(args.image)
-    plt.imshow(np.asarray(image))
+    #image = Image.open(args.image)
+    #plt.imshow(np.asarray(image))
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--image', type=str, required=True,
                         help='input image for generating caption')
-    parser.add_argument('--encoder_path', type=str, default='./models/encoder-50-200.pkl',
+    parser.add_argument('--encoder_path', type=str, default='./trained_weights/encoder-50-200.pkl',
                         help='path for trained encoder')
-    parser.add_argument('--decoder_path', type=str, default='./models/decoder-50-200.pkl',
+    parser.add_argument('--decoder_path', type=str, default='./trained_weights/decoder-50-200.pkl',
                         help='path for trained decoder')
     parser.add_argument('--vocab_path', type=str, default='/zf18/fz2ds/Text2Image/Text2ImageGenerateModel/flowers_processed/vocab.pkl',
                         help='path for vocabulary wrapper')
