@@ -6,9 +6,10 @@ import os
 import pickle
 from data_loader import get_loader 
 from build_vocab import Vocabulary
-from model import EncoderCNN, DecoderRNN 
+from model import EncoderCNN, DecoderRNN, Estimator
 from torch.autograd import Variable 
 from torch.nn.utils.rnn import pack_padded_sequence
+from torch.nn.utils.rnn import pad_packed_sequence
 from torchvision import transforms
 
 def to_var(x, volatile=False):
@@ -44,10 +45,12 @@ def main(args):
     encoder = EncoderCNN(args.embed_size)
     decoder = DecoderRNN(args.embed_size, args.hidden_size, 
                          len(vocab), args.num_layers)
+    estimator = Estimator(args.embed_size, len(vocab))
     
     if torch.cuda.is_available():
         encoder.cuda()
         decoder.cuda()
+        estimator.cuda()
 
     # Loss and Optimizer
     criterion = nn.CrossEntropyLoss()
@@ -63,15 +66,31 @@ def main(args):
             images = to_var(images, volatile=True)
             captions = to_var(captions)
             targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
-            
+
             # Forward, Backward and Optimize
             decoder.zero_grad()
             encoder.zero_grad()
+            estimator.zero_grad()
+            
             features = encoder(images)
-            outputs = decoder(features, captions, lengths, args.use_policy)
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optimizer.step()
+            # if using policy gradient
+            if(args.use_policy):
+                # outputs is a list of captions
+                outputs, log_probs = decoder(features, captions, lengths, True)
+#                 targets = []
+#                 for i in range(captions.shape[0]):
+#                     targets.append(captions[i])
+                rewards_fake = estimator(features, outputs)
+                rewards_real = estimator(features, captions)
+                
+                return
+    
+            # if using strict matching
+            else:
+                outputs = decoder(features, captions, lengths, False)
+                loss = criterion(outputs, targets)
+                loss.backward()
+                optimizer.step()
 
             # Print log info
             if i % args.log_step == 0:
@@ -115,10 +134,10 @@ if __name__ == '__main__':
                         help='number of layers in lstm')
     
     parser.add_argument('--num_epochs', type=int, default=50)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=20)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--learning_rate', type=float, default=0.001)
-    parser.add_argument('--use_policy', type=bool, default=False)
+    parser.add_argument('--use_policy', default=False, action='store_true')
     args = parser.parse_args()
     print(args)
     main(args)

@@ -49,19 +49,54 @@ class DecoderRNN(nn.Module):
         
     def forward(self, features, captions, lengths, use_policy):
         """Decode image feature vectors and generates captions."""
-	if(not use_policy):
-    	    # embed the captions, output will be (batch_size, max_batch_length, feature_size)
+        if(not use_policy):
+            # embed the captions, output will be (batch_size, max_batch_length, feature_size)
             embeddings = self.embed(captions)
-    	    # cat the image feature with the second dim of embeddings.
+            # cat the image feature with the second dim of embeddings.
             embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
-    	    # packed[0] will be of (batch_captions_length(without padding), feature_size)
+            # packed[0] will be of (batch_captions_length(without padding), feature_size)
             packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
             hiddens, _ = self.lstm(packed)
-   	    # outputs will be of (batch_captions_length(without padding), vocab_size)
+            # outputs will be of (batch_captions_length(without padding), vocab_size)
             outputs = self.linear(hiddens[0])
             return outputs
-	else:
-	    return None
+        else:
+            batch_size = features.shape[0]
+            sampled_ids = [[] for i in range(batch_size)]
+            saved_log_probs = [[] for i in range(batch_size)]
+            
+            for n in range((batch_size)):
+                # each feature here would be (256,), we need to first make it (1,1,256) as inputs
+                inputs = features[n].unsqueeze(0).unsqueeze(0)
+                # start sampling, when sampled [end] or exceed 20 tokens, end sampling
+                predicted = Variable(torch.cuda.LongTensor(1))
+                i = 0
+                states = None
+                
+                while(predicted.data[0] != 2 and i < 20):
+                    hiddens, states = self.lstm(inputs, states)
+                    outputs = self.linear(hiddens.squeeze(1))
+                    outputs = F.softmax(outputs, dim=1)
+                    dist = Categorical(outputs)
+                    predicted = dist.sample()
+                    log_prob = dist.log_prob(predicted)
+                    sampled_ids[n].append(predicted)
+                    saved_log_probs[n].append(log_prob)
+                    i += 1
+                    
+                    inputs = self.embed(predicted)
+                    inputs = inputs.unsqueeze(1)
+                
+                while(i < lengths[0]):
+                    sampled_ids[n].append(Variable(torch.cuda.LongTensor([0])))
+                    saved_log_probs[n].append(Variable(torch.cuda.FloatTensor([0])))
+                    i += 1
+                    
+                sampled_ids[n] = torch.cat(sampled_ids[n], 0)
+                saved_log_probs[n] = torch.cat(saved_log_probs[n], 0)
+            sampled_ids = torch.stack(sampled_ids)
+            saved_log_probs = torch.stack(saved_log_probs)
+            return sampled_ids, saved_log_probs
     
     def sample(self, features, states=None):
         """Samples captions for given image features (Greedy search)."""
@@ -73,14 +108,28 @@ class DecoderRNN(nn.Module):
 
             # Method 1: get the index of the greatest value
             # predicted = outputs.max(1)[1]
-	    # Method 2: Sampling from the distribution
-	    outputs = F.softmax(outputs, dim=1)
+            # Method 2: Sampling from the distribution
+            outputs = F.softmax(outputs, dim=1)
             dist = Categorical(outputs)
-   	    predicted = dist.sample()
+            predicted = dist.sample()
 
             sampled_ids.append(predicted)
             inputs = self.embed(predicted)
             inputs = inputs.unsqueeze(1)                         # (batch_size, 1, embed_size)
-        # this is to convert list of Tensor to list of integers.
+        # this is to convert list of Tensor to a Tensor.
         sampled_ids = torch.cat(sampled_ids, 0)                  # (batch_size, 20)
         return sampled_ids.squeeze()
+    
+class Estimator(nn.Module):
+    def __init__(self, embed_size, vocab_size):
+        super(Estimator, self).__init__()
+        self.embed = nn.Embedding(vocab_size, embed_size)
+        return
+    
+    def init_weights(self):
+        self.embed.weight.data.uniform_(-0.1, 0.1)
+        return
+    
+    def forward(self, features, captions):
+        embeddings = self.embed(captions)
+        return
