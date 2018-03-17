@@ -45,7 +45,7 @@ def main(args):
     encoder = EncoderCNN(args.embed_size)
     decoder = DecoderRNN(args.embed_size, args.hidden_size, 
                          len(vocab), args.num_layers)
-    estimator = Estimator(args.embed_size, len(vocab))
+    estimator = Estimator(args.embed_size, len(vocab), args.hidden_size, args.num_layers)
     
     if torch.cuda.is_available():
         encoder.cuda()
@@ -54,8 +54,11 @@ def main(args):
 
     # Loss and Optimizer
     criterion = nn.CrossEntropyLoss()
-    params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
-    optimizer = torch.optim.Adam(params, lr=args.learning_rate)
+    cap_params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
+    est_params = list(estimator.parameters())
+    
+    cap_optimizer = torch.optim.Adam(cap_params, lr=args.learning_rate)
+    est_optimizer = torch.optim.Adam(est_params, lr=args.learning_rate)
     
     # Train the Models
     total_step = len(data_loader)
@@ -65,7 +68,6 @@ def main(args):
             # Set mini-batch dataset
             images = to_var(images, volatile=True)
             captions = to_var(captions)
-            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
             # Forward, Backward and Optimize
             decoder.zero_grad()
@@ -73,39 +75,42 @@ def main(args):
             estimator.zero_grad()
             
             features = encoder(images)
+            
             # if using policy gradient
             if(args.use_policy):
                 # outputs is a list of captions
                 outputs, log_probs = decoder(features, captions, lengths, True)
-#                 targets = []
-#                 for i in range(captions.shape[0]):
-#                     targets.append(captions[i])
+                
+                # get the rewards of the generated captions and real captions
                 rewards_fake = estimator(features, outputs)
+                
                 rewards_real = estimator(features, captions)
                 
-                return
-    
+                # backprop the loss for estimator
+                # backprop the loss for encoder and decoder of the caption generator
+
             # if using strict matching
             else:
+                targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
                 outputs = decoder(features, captions, lengths, False)
                 loss = criterion(outputs, targets)
                 loss.backward()
                 optimizer.step()
 
-            # Print log info
-            if i % args.log_step == 0:
-                print('Epoch [%d/%d], Step [%d/%d], Loss: %.4f, Perplexity: %5.4f'
-                      %(epoch, args.num_epochs, i, total_step, 
-                        loss.data[0], np.exp(loss.data[0]))) 
+#             # Print log info
+#             if i % args.log_step == 0:
+#                 print('Epoch [%d/%d], Step [%d/%d], Loss: %.4f, Perplexity: %5.4f'
+#                       %(epoch, args.num_epochs, i, total_step, 
+#                         loss.data[0], np.exp(loss.data[0]))) 
                 
-            # Save the models
-            if (i+1) % args.save_step == 0:
-                torch.save(decoder.state_dict(), 
-                           os.path.join(args.model_path, 
-                                        'decoder-%d-%d.pkl' %(epoch+1, i+1)))
-                torch.save(encoder.state_dict(), 
-                           os.path.join(args.model_path, 
-                                        'encoder-%d-%d.pkl' %(epoch+1, i+1)))
+#             # Save the models
+#             if (i+1) % args.save_step == 0:
+#                 torch.save(decoder.state_dict(), 
+#                            os.path.join(args.model_path, 
+#                                         'decoder-%d-%d.pkl' %(epoch+1, i+1)))
+#                 torch.save(encoder.state_dict(), 
+#                            os.path.join(args.model_path, 
+#                                         'encoder-%d-%d.pkl' %(epoch+1, i+1)))
                 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -126,7 +131,7 @@ if __name__ == '__main__':
                         help='step size for saving trained models')
     
     # Model parameters
-    parser.add_argument('--embed_size', type=int , default=256 ,
+    parser.add_argument('--embed_size', type=int , default=512 ,
                         help='dimension of word embedding vectors')
     parser.add_argument('--hidden_size', type=int , default=512 ,
                         help='dimension of lstm hidden states')

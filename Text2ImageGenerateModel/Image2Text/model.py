@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
+from torch.nn.utils.rnn import pad_packed_sequence
 from torch.autograd import Variable
 from torch.distributions import Categorical
 import torch.nn.functional as F
@@ -57,6 +58,7 @@ class DecoderRNN(nn.Module):
             # packed[0] will be of (batch_captions_length(without padding), feature_size)
             packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
             hiddens, _ = self.lstm(packed)
+            print(hiddens[0].shape)
             # outputs will be of (batch_captions_length(without padding), vocab_size)
             outputs = self.linear(hiddens[0])
             return outputs
@@ -72,7 +74,9 @@ class DecoderRNN(nn.Module):
                 predicted = Variable(torch.cuda.LongTensor(1))
                 i = 0
                 states = None
-                
+                max_length = max(lengths)
+                # if using the predicted word of last state as this state's input
+                '''
                 while(predicted.data[0] != 2 and i < 20):
                     hiddens, states = self.lstm(inputs, states)
                     outputs = self.linear(hiddens.squeeze(1))
@@ -86,12 +90,30 @@ class DecoderRNN(nn.Module):
                     
                     inputs = self.embed(predicted)
                     inputs = inputs.unsqueeze(1)
-                
-                while(i < lengths[0]):
+                while(i < 20):
                     sampled_ids[n].append(Variable(torch.cuda.LongTensor([0])))
                     saved_log_probs[n].append(Variable(torch.cuda.FloatTensor([0])))
                     i += 1
+                '''
+                # if using the word in the sentence as this state's input
+                while(predicted.data[0] != 2 and i < max_length):
+                    hiddens, states = self.lstm(inputs, states)
+                    outputs = self.linear(hiddens.squeeze(1))
+                    outputs = F.softmax(outputs, dim=1)
+                    dist = Categorical(outputs)
+                    predicted = dist.sample()
+                    log_prob = dist.log_prob(predicted)
+                    sampled_ids[n].append(predicted)
+                    saved_log_probs[n].append(log_prob)
+                    i += 1
                     
+                    inputs = self.embed(predicted)
+                    inputs = inputs.unsqueeze(1)
+                while(i < max_length):
+                    sampled_ids[n].append(Variable(torch.cuda.LongTensor([0])))
+                    saved_log_probs[n].append(Variable(torch.cuda.FloatTensor([0])))
+                    i += 1
+                # cat the sampled_ids of one image as a 1D tensor, then stack the batch's as a 2D tensor
                 sampled_ids[n] = torch.cat(sampled_ids[n], 0)
                 saved_log_probs[n] = torch.cat(saved_log_probs[n], 0)
             sampled_ids = torch.stack(sampled_ids)
@@ -121,9 +143,12 @@ class DecoderRNN(nn.Module):
         return sampled_ids.squeeze()
     
 class Estimator(nn.Module):
-    def __init__(self, embed_size, vocab_size):
+    def __init__(self, embed_size, vocab_size, hidden_size, num_layers):
         super(Estimator, self).__init__()
         self.embed = nn.Embedding(vocab_size, embed_size)
+        self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
+#         self.encoderCNN = EncoderCNN(embed_size)
+#         self.
         return
     
     def init_weights(self):
@@ -132,4 +157,11 @@ class Estimator(nn.Module):
     
     def forward(self, features, captions):
         embeddings = self.embed(captions)
-        return
+        # packed[0] will be of (batch_captions_length(without padding), feature_size)
+#         packed = pack_padded_sequence(embeddings, lengths, batch_first=True)
+        hiddens, _ = self.lstm(embeddings)
+        last_hiddens = hiddens[:, -1, :]
+        # reward will be (batch_size, 1)
+        reward = torch.bmm(features.view(-1, 1, features.shape[1]), last_hiddens.view(-1, features.shape[1], 1)).squeeze(2)
+        reward = torch.exp(reward)/(1+torch.exp(reward))
+        return reward
