@@ -58,7 +58,6 @@ class DecoderRNN(nn.Module):
             # packed[0] will be of (batch_captions_length(without padding), feature_size)
             packed = pack_padded_sequence(embeddings, lengths, batch_first=True) 
             hiddens, _ = self.lstm(packed)
-            print(hiddens[0].shape)
             # outputs will be of (batch_captions_length(without padding), vocab_size)
             outputs = self.linear(hiddens[0])
             return outputs

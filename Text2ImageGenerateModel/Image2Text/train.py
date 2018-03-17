@@ -41,76 +41,142 @@ def main(args):
                              transform, args.batch_size,
                              shuffle=True, num_workers=args.num_workers) 
 
-    # Build the models
-    encoder = EncoderCNN(args.embed_size)
-    decoder = DecoderRNN(args.embed_size, args.hidden_size, 
-                         len(vocab), args.num_layers)
-    estimator = Estimator(args.embed_size, len(vocab), args.hidden_size, args.num_layers)
-    
-    if torch.cuda.is_available():
-        encoder.cuda()
-        decoder.cuda()
-        estimator.cuda()
+    # if using policy gradient
+    if(args.use_policy):
+        # Build the models
+        encoder = EncoderCNN(args.embed_size)
+        decoder = DecoderRNN(args.embed_size, args.hidden_size, 
+                             len(vocab), args.num_layers)
+        estimator = Estimator(args.embed_size, len(vocab), args.hidden_size, args.num_layers)
 
-    # Loss and Optimizer
-    criterion = nn.CrossEntropyLoss()
-    cap_params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
-    est_params = list(estimator.parameters())
-    
-    cap_optimizer = torch.optim.Adam(cap_params, lr=args.learning_rate)
-    est_optimizer = torch.optim.Adam(est_params, lr=args.learning_rate)
-    
-    # Train the Models
-    total_step = len(data_loader)
-    for epoch in range(args.num_epochs):
-        for i, (images, captions, lengths) in enumerate(data_loader):
+        if torch.cuda.is_available():
+            encoder.cuda()
+            decoder.cuda()
+            estimator.cuda()
             
-            # Set mini-batch dataset
-            images = to_var(images, volatile=True)
-            captions = to_var(captions)
+        # loss and optimizer
+        BCE_loss = nn.BCELoss()
+        label_real = to_var(torch.ones(args.batch_size, 1))
+        label_fake = to_var(torch.zeros(args.batch_size, 1))
 
-            # Forward, Backward and Optimize
-            decoder.zero_grad()
-            encoder.zero_grad()
-            estimator.zero_grad()
-            
-            features = encoder(images)
-            
-            # if using policy gradient
-            if(args.use_policy):
+        cap_params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
+        est_params = list(estimator.parameters())
+
+        cap_optimizer = torch.optim.Adam(cap_params, lr=args.learning_rate)
+        est_optimizer = torch.optim.Adam(est_params, lr=args.learning_rate)
+        
+        # training
+        total_step = len(data_loader)
+        for epoch in range(args.num_epochs):
+            for i, (images, captions, lengths) in enumerate(data_loader):
+
+                # Set mini-batch dataset
+                images = to_var(images, volatile=True)
+                captions = to_var(captions)
+
+                # Forward, Backward and Optimize
+                decoder.zero_grad()
+                encoder.zero_grad()
+                estimator.zero_grad()
+
+                features = encoder(images)
+
                 # outputs is a list of captions
                 outputs, log_probs = decoder(features, captions, lengths, True)
-                
                 # get the rewards of the generated captions and real captions
                 rewards_fake = estimator(features, outputs)
-                
-                rewards_real = estimator(features, captions)
-                
-                # backprop the loss for estimator
-                # backprop the loss for encoder and decoder of the caption generator
 
-            # if using strict matching
-            else:
+                rewards_real = estimator(features, captions)
+
+                # backprop the loss for estimator
+                est_loss_real = BCE_loss(rewards_real, label_real)
+                est_loss_fake = BCE_loss(rewards_fake, label_fake)
+                est_loss = est_loss_real + est_loss_fake
+                est_loss.backward(retain_graph=True)
+                est_optimizer.step()
+                
+                # backprop the loss for encoder and decoder of the caption generator
+                cap_loss = []
+                for i in range(rewards_fake.shape[0]):
+                    for j in range(log_probs.shape[1]):
+                        cap_loss.append(-log_probs[i][j] * rewards_fake[i])
+                        
+                cap_loss = torch.cat(cap_loss).sum()
+                
+                cap_loss.backward()
+                cap_optimizer.step()
+                
+                
+                # Print log info
+                if i % args.log_step == 0:
+                    print('Epoch [%d/%d], Step [%d/%d], Estimator Loss: %.4f, Generator Loss: %.4f'
+                          %(epoch, args.num_epochs, i, total_step, 
+                            est_loss.data[0], cap_loss.data[0])) 
+
+                # Save the models
+                if (i+1) % args.save_step == 0:
+                    torch.save(decoder.state_dict(), 
+                               os.path.join(args.model_path, 
+                                            'decoder-%d-%d.pkl' %(epoch+1, i+1)))
+                    torch.save(encoder.state_dict(), 
+                               os.path.join(args.model_path, 
+                                            'encoder-%d-%d.pkl' %(epoch+1, i+1)))
+                    torch.save(estimator.state_dict(), 
+                               os.path.join(args.model_path, 
+                                            'estimator-%d-%d.pkl' %(epoch+1, i+1)))
+                
+           
+    # if using strict matching
+    else:
+        # Build the models
+        encoder = EncoderCNN(args.embed_size)
+        decoder = DecoderRNN(args.embed_size, args.hidden_size, 
+                             len(vocab), args.num_layers)
+        if torch.cuda.is_available():
+            encoder.cuda()
+            decoder.cuda()
+        
+        params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
+        optimizer = torch.optim.Adam(params, lr=args.learning_rate)
+        
+        # Loss and Optimizer
+        criterion = nn.CrossEntropyLoss()
+        
+        # training
+        total_step = len(data_loader)
+        for epoch in range(args.num_epochs):
+            for i, (images, captions, lengths) in enumerate(data_loader):
+                
+                # Set mini-batch dataset
+                images = to_var(images, volatile=True)
+                captions = to_var(captions)
+
+                # Forward, Backward and Optimize
+                decoder.zero_grad()
+                encoder.zero_grad()
+                
+                features = encoder(images)
+
                 targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
                 outputs = decoder(features, captions, lengths, False)
                 loss = criterion(outputs, targets)
                 loss.backward()
                 optimizer.step()
 
-#             # Print log info
-#             if i % args.log_step == 0:
-#                 print('Epoch [%d/%d], Step [%d/%d], Loss: %.4f, Perplexity: %5.4f'
-#                       %(epoch, args.num_epochs, i, total_step, 
-#                         loss.data[0], np.exp(loss.data[0]))) 
-                
-#             # Save the models
-#             if (i+1) % args.save_step == 0:
-#                 torch.save(decoder.state_dict(), 
-#                            os.path.join(args.model_path, 
-#                                         'decoder-%d-%d.pkl' %(epoch+1, i+1)))
-#                 torch.save(encoder.state_dict(), 
-#                            os.path.join(args.model_path, 
-#                                         'encoder-%d-%d.pkl' %(epoch+1, i+1)))
+                # Print log info
+                if i % args.log_step == 0:
+                    print('Epoch [%d/%d], Step [%d/%d], Loss: %.4f, Perplexity: %5.4f'
+                          %(epoch, args.num_epochs, i, total_step, 
+                            loss.data[0], np.exp(loss.data[0]))) 
+
+                # Save the models
+                if (i+1) % args.save_step == 0:
+                    torch.save(decoder.state_dict(), 
+                               os.path.join(args.model_path, 
+                                            'decoder-%d-%d.pkl' %(epoch+1, i+1)))
+                    torch.save(encoder.state_dict(), 
+                               os.path.join(args.model_path, 
+                                            'encoder-%d-%d.pkl' %(epoch+1, i+1)))
                 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
