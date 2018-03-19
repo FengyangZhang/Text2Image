@@ -69,7 +69,11 @@ def main(args):
         total_step = len(data_loader)
         for epoch in range(args.num_epochs):
             for i, (images, captions, lengths) in enumerate(data_loader):
-
+                # leave last batch out
+                if(i == total_step - 1):
+                    print('leaving last batch out because not enough data...')
+                    continue
+                    
                 # Set mini-batch dataset
                 images = to_var(images, volatile=True)
                 captions = to_var(captions)
@@ -94,19 +98,15 @@ def main(args):
                 est_loss = est_loss_real + est_loss_fake
                 est_loss.backward(retain_graph=True)
                 est_optimizer.step()
-                
                 # backprop the loss for encoder and decoder of the caption generator
                 cap_loss = []
-                for i in range(rewards_fake.shape[0]):
-                    for j in range(log_probs.shape[1]):
-                        cap_loss.append(-log_probs[i][j] * rewards_fake[i])
+                for r in range(rewards_fake.shape[0]):
+                    for l in range(log_probs.shape[1]):
+                        cap_loss.append(-log_probs[r][l] * rewards_fake[r])
                         
                 cap_loss = torch.cat(cap_loss).sum()
-                
                 cap_loss.backward()
                 cap_optimizer.step()
-                
-                
                 # Print log info
                 if i % args.log_step == 0:
                     print('Epoch [%d/%d], Step [%d/%d], Estimator Loss: %.4f, Generator Loss: %.4f'
@@ -146,7 +146,6 @@ def main(args):
         total_step = len(data_loader)
         for epoch in range(args.num_epochs):
             for i, (images, captions, lengths) in enumerate(data_loader):
-                
                 # Set mini-batch dataset
                 images = to_var(images, volatile=True)
                 captions = to_var(captions)
@@ -204,8 +203,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_layers', type=int , default=1 ,
                         help='number of layers in lstm')
     
-    parser.add_argument('--num_epochs', type=int, default=50)
-    parser.add_argument('--batch_size', type=int, default=20)
+    parser.add_argument('--num_epochs', type=int, default=20)
+    parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument('--use_policy', default=False, action='store_true')
