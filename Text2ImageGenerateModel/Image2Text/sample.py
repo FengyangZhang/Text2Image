@@ -79,9 +79,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--image', type=str, required=True,
                         help='input image for generating caption')
-    parser.add_argument('--encoder_path', type=str, default='./trained_weights/encoder-50-200.pkl',
+    parser.add_argument('--encoder_path', type=str, default='./trained_weights/encoder-3-400.pkl',
                         help='path for trained encoder')
-    parser.add_argument('--decoder_path', type=str, default='./trained_weights/decoder-50-200.pkl',
+    parser.add_argument('--decoder_path', type=str, default='./trained_weights/decoder-3-400.pkl',
                         help='path for trained decoder')
     parser.add_argument('--vocab_path', type=str, default='/zf18/fz2ds/Text2Image/Text2ImageGenerateModel/flowers_processed/vocab.pkl',
                         help='path for vocabulary wrapper')

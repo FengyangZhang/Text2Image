@@ -62,6 +62,7 @@ class DecoderRNN(nn.Module):
             outputs = self.linear(hiddens[0])
             return outputs
         else:
+            embeddings = self.embed(captions)
             batch_size = features.shape[0]
             sampled_ids = [[] for i in range(batch_size)]
             saved_log_probs = [[] for i in range(batch_size)]
@@ -95,19 +96,21 @@ class DecoderRNN(nn.Module):
                     i += 1
                 '''
                 # if using the word in the sentence as this state's input
+                # if see end token in the generated sentence (not the real sentence)!
                 while(predicted.data[0] != 2 and i < max_length):
                     hiddens, states = self.lstm(inputs, states)
                     outputs = self.linear(hiddens.squeeze(1))
                     outputs = F.softmax(outputs, dim=1)
                     dist = Categorical(outputs)
                     predicted = dist.sample()
+		    print(predicted.data[0])
                     log_prob = dist.log_prob(predicted)
                     sampled_ids[n].append(predicted)
                     saved_log_probs[n].append(log_prob)
                     i += 1
                     
-                    inputs = self.embed(predicted)
-                    inputs = inputs.unsqueeze(1)
+                    inputs = embeddings[n][i-1]
+                    inputs = inputs.unsqueeze(0).unsqueeze(0)
                 while(i < max_length):
                     sampled_ids[n].append(Variable(torch.cuda.LongTensor([0])))
                     saved_log_probs[n].append(Variable(torch.cuda.FloatTensor([0])))

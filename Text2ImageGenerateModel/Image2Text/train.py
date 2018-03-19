@@ -204,7 +204,7 @@ if __name__ == '__main__':
                         help='number of layers in lstm')
     
     parser.add_argument('--num_epochs', type=int, default=20)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument('--use_policy', default=False, action='store_true')
