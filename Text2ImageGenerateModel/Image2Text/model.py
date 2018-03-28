@@ -75,38 +75,21 @@ class DecoderRNN(nn.Module):
                 i = 0
                 states = None
                 max_length = max(lengths)
-                # if using the predicted word of last state as this state's input
-                '''
-                while(predicted.data[0] != 2 and i < 20):
-                    hiddens, states = self.lstm(inputs, states)
-                    outputs = self.linear(hiddens.squeeze(1))
-                    outputs = F.softmax(outputs, dim=1)
-                    dist = Categorical(outputs)
-                    predicted = dist.sample()
-                    log_prob = dist.log_prob(predicted)
-                    sampled_ids[n].append(predicted)
-                    saved_log_probs[n].append(log_prob)
-                    i += 1
-                    
-                    inputs = self.embed(predicted)
-                    inputs = inputs.unsqueeze(1)
-                while(i < 20):
-                    sampled_ids[n].append(Variable(torch.cuda.LongTensor([0])))
-                    saved_log_probs[n].append(Variable(torch.cuda.FloatTensor([0])))
-                    i += 1
-                '''
+                
+                # TODO: the code below can also use pack_padded_sequence to speed up
                 # if using the word in the sentence as this state's input
-                # if see end token in the generated sentence (not the real sentence)!
+                # end if see end token in the generated sentence (not the real sentence)!
                 while(predicted.data[0] != 2 and i < max_length):
                     hiddens, states = self.lstm(inputs, states)
                     outputs = self.linear(hiddens.squeeze(1))
                     outputs = F.softmax(outputs, dim=1)
                     dist = Categorical(outputs)
                     predicted = dist.sample()
-		    print(predicted.data[0])
                     log_prob = dist.log_prob(predicted)
                     sampled_ids[n].append(predicted)
-                    saved_log_probs[n].append(log_prob)
+#                     saved_log_probs[n].append(log_prob)
+                    # testing if making loss variable 0 works! delete soon
+                    saved_log_probs[n].append(Variable(torch.cuda.FloatTensor([0])))
                     i += 1
                     
                     inputs = embeddings[n][i-1]

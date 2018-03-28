@@ -48,6 +48,12 @@ def main(args):
         decoder = DecoderRNN(args.embed_size, args.hidden_size, 
                              len(vocab), args.num_layers)
         estimator = Estimator(args.embed_size, len(vocab), args.hidden_size, args.num_layers)
+        
+        # if using pretrained model
+        if(args.use_pretrained):
+            encoder.load_state_dict(torch.load(args.pretrained_encoder))
+            decoder.load_state_dict(torch.load(args.pretrained_decoder))
+            estimator.load_state_dict(torch.load(args.pretrained_estimator))
 
         if torch.cuda.is_available():
             encoder.cuda()
@@ -89,12 +95,18 @@ def main(args):
                 outputs, log_probs = decoder(features, captions, lengths, True)
                 # get the rewards of the generated captions and real captions
                 rewards_fake = estimator(features, outputs)
-
                 rewards_real = estimator(features, captions)
-
+                
                 # backprop the loss for estimator
                 est_loss_real = BCE_loss(rewards_real, label_real)
                 est_loss_fake = BCE_loss(rewards_fake, label_fake)
+                
+                # check if estimator has been trained enough
+#                 print('fake rewards:', rewards_fake)
+#                 print('real rewards:', rewards_real)
+#                 print('real loss:', est_loss_real)
+#                 print('fake loss:', est_loss_fake)
+                
                 est_loss = est_loss_real + est_loss_fake
                 est_loss.backward(retain_graph=True)
                 est_optimizer.step()
@@ -155,7 +167,7 @@ def main(args):
                 encoder.zero_grad()
                 
                 features = encoder(images)
-
+                # pack_padded_sequence will pack a padded sequence (in time step order)
                 targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
                 outputs = decoder(features, captions, lengths, False)
                 loss = criterion(outputs, targets)
@@ -181,6 +193,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_path', type=str, default='./trained_weights/' ,
                         help='path for saving trained models')
+    
+    parser.add_argument('--use_pretrained', default=False, action='store_true')
+    parser.add_argument('--pretrained_encoder', type=str, default='./trained_weights/encoder-15-900.pkl')
+    parser.add_argument('--pretrained_decoder', type=str, default='./trained_weights/decoder-15-900.pkl')
+    parser.add_argument('--pretrained_estimator', type=str, default='./trained_weights/estimator-15-900.pkl')
+    
     parser.add_argument('--crop_size', type=int, default=224 ,
                         help='size for randomly cropping images')
     parser.add_argument('--vocab_path', type=str, default='/zf18/fz2ds/Text2Image/Text2ImageGenerateModel/flowers_processed/vocab.pkl',
@@ -204,7 +222,7 @@ if __name__ == '__main__':
                         help='number of layers in lstm')
     
     parser.add_argument('--num_epochs', type=int, default=20)
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument('--use_policy', default=False, action='store_true')
