@@ -68,7 +68,7 @@ class DecoderRNN(nn.Module):
             saved_log_probs = [[] for i in range(batch_size)]
             
             for n in range((batch_size)):
-                # each feature here would be (256,), we need to first make it (1,1,256) as inputs
+                # each feature here would be (512,), we need to first make it (1,1,512) as inputs
                 inputs = features[n].unsqueeze(0).unsqueeze(0)
                 # start sampling, when sampled [end] or exceed 20 tokens, end sampling
                 predicted = Variable(torch.cuda.LongTensor(1))
@@ -87,9 +87,7 @@ class DecoderRNN(nn.Module):
                     predicted = dist.sample()
                     log_prob = dist.log_prob(predicted)
                     sampled_ids[n].append(predicted)
-#                     saved_log_probs[n].append(log_prob)
-                    # testing if making loss variable 0 works! delete soon
-                    saved_log_probs[n].append(Variable(torch.cuda.FloatTensor([0])))
+                    saved_log_probs[n].append(log_prob)
                     i += 1
                     
                     inputs = embeddings[n][i-1]
@@ -101,6 +99,8 @@ class DecoderRNN(nn.Module):
                 # cat the sampled_ids of one image as a 1D tensor, then stack the batch's as a 2D tensor
                 sampled_ids[n] = torch.cat(sampled_ids[n], 0)
                 saved_log_probs[n] = torch.cat(saved_log_probs[n], 0)
+#                 print('sampled:', sampled_ids[n])
+#                 print('target:', captions[n])
             sampled_ids = torch.stack(sampled_ids)
             saved_log_probs = torch.stack(saved_log_probs)
             return sampled_ids, saved_log_probs
@@ -132,8 +132,6 @@ class Estimator(nn.Module):
         super(Estimator, self).__init__()
         self.embed = nn.Embedding(vocab_size, embed_size)
         self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
-#         self.encoderCNN = EncoderCNN(embed_size)
-#         self.
         return
     
     def init_weights(self):

@@ -31,8 +31,11 @@ class MyDataset(data.Dataset):
         """Returns one data pair (image and caption)."""
         data = self.data
         vocab = self.vocab
-        caption = data[index]['caption']
+        caption = data[index]['caption']        
         img_id = data[index]['image_id']
+        # get wrong caption to train the estimator
+        wrong_caption = find_wrong_caption(img_id)
+        
         path = img_id + '.jpg'
         image = Image.open(os.path.join(self.root, path)).convert('RGB')
         
@@ -40,17 +43,28 @@ class MyDataset(data.Dataset):
             image = self.transform(image)
 
         # Convert caption (string) to word ids.
+        target = caption2ids(caption)
+        wrong_target = caption2ids(wrong_caption)
+        return image, target, wrong_target
+
+    def __len__(self):
+        return len(self.data)
+    
+    def find_wrong_caption(self, img_id):
+        rand = np.random.randint(len(self.data))
+        while(self.data[rand]['image_id'][:11] == img_id[:11]):
+            rand = np.random.randint(len(self.data))
+        
+        return self.data[rand]['caption']
+    
+    def caption2ids(self, caption):
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
         caption = []
         caption.append(vocab('<start>'))
         caption.extend([vocab(token) for token in tokens])
         caption.append(vocab('<end>'))
         target = torch.Tensor(caption)
-        return image, target
-
-    def __len__(self):
-        return len(self.data)
-
+        return target
 
 def collate_fn(data):
     """Creates mini-batch tensors from the list of tuples (image, caption).

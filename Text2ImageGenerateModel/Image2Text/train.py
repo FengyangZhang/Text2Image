@@ -47,17 +47,20 @@ def main(args):
         encoder = EncoderCNN(args.embed_size)
         decoder = DecoderRNN(args.embed_size, args.hidden_size, 
                              len(vocab), args.num_layers)
+        est_encoder = EncoderCNN(args.embed_size)
         estimator = Estimator(args.embed_size, len(vocab), args.hidden_size, args.num_layers)
         
         # if using pretrained model
         if(args.use_pretrained):
             encoder.load_state_dict(torch.load(args.pretrained_encoder))
             decoder.load_state_dict(torch.load(args.pretrained_decoder))
+            est_encoder.load_state_dict(torch.load(args.pretrained_est_encoder))
             estimator.load_state_dict(torch.load(args.pretrained_estimator))
 
         if torch.cuda.is_available():
             encoder.cuda()
             decoder.cuda()
+            est_encoder.cuda()
             estimator.cuda()
             
         # loss and optimizer
@@ -66,7 +69,7 @@ def main(args):
         label_fake = to_var(torch.zeros(args.batch_size, 1))
 
         cap_params = list(decoder.parameters()) + list(encoder.linear.parameters()) + list(encoder.bn.parameters())
-        est_params = list(estimator.parameters())
+        est_params = list(est_encoder.linear.parameters()) + list(est_encoder.bn.parameters()) + list(estimator.parameters())
 
         cap_optimizer = torch.optim.Adam(cap_params, lr=args.learning_rate)
         est_optimizer = torch.optim.Adam(est_params, lr=args.learning_rate)
@@ -81,21 +84,28 @@ def main(args):
                     continue
                     
                 # Set mini-batch dataset
+                # set images volatile because we don't want to calculate gradient of CNN
                 images = to_var(images, volatile=True)
                 captions = to_var(captions)
 
                 # Forward, Backward and Optimize
                 decoder.zero_grad()
                 encoder.zero_grad()
+                est_encoder.zero_grad()
                 estimator.zero_grad()
 
                 features = encoder(images)
 
                 # outputs is a list of captions
                 outputs, log_probs = decoder(features, captions, lengths, True)
+                
+                # cut off the backward pass between estimator and decoder
+                outputs = Variable(outputs.data)
+                est_features = est_encoder(images)
+                
                 # get the rewards of the generated captions and real captions
-                rewards_fake = estimator(features, outputs)
-                rewards_real = estimator(features, captions)
+                rewards_fake = estimator(est_features, outputs)
+                rewards_real = estimator(est_features, captions)
                 
                 # backprop the loss for estimator
                 est_loss_real = BCE_loss(rewards_real, label_real)
@@ -108,17 +118,20 @@ def main(args):
 #                 print('fake loss:', est_loss_fake)
                 
                 est_loss = est_loss_real + est_loss_fake
-                est_loss.backward(retain_graph=True)
+#                 est_loss.backward(retain_graph=True)
+                est_loss.backward()
                 est_optimizer.step()
+                
                 # backprop the loss for encoder and decoder of the caption generator
+                rewards_fake = Variable(rewards_fake.data)
                 cap_loss = []
                 for r in range(rewards_fake.shape[0]):
                     for l in range(log_probs.shape[1]):
                         cap_loss.append(-log_probs[r][l] * rewards_fake[r])
                         
                 cap_loss = torch.cat(cap_loss).sum()
-                cap_loss.backward()
-                cap_optimizer.step()
+#                 cap_loss.backward()
+#                 cap_optimizer.step()
                 # Print log info
                 if i % args.log_step == 0:
                     print('Epoch [%d/%d], Step [%d/%d], Estimator Loss: %.4f, Generator Loss: %.4f'
@@ -133,6 +146,9 @@ def main(args):
                     torch.save(encoder.state_dict(), 
                                os.path.join(args.model_path, 
                                             'encoder-%d-%d.pkl' %(epoch+1, i+1)))
+                    torch.save(est_encoder.state_dict(), 
+                               os.path.join(args.model_path, 
+                                            'est_encoder-%d-%d.pkl' %(epoch+1, i+1)))
                     torch.save(estimator.state_dict(), 
                                os.path.join(args.model_path, 
                                             'estimator-%d-%d.pkl' %(epoch+1, i+1)))
@@ -191,12 +207,13 @@ def main(args):
                 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_path', type=str, default='./trained_weights/' ,
+    parser.add_argument('--model_path', type=str, default='./trained_weights/trainEstOnly/' ,
                         help='path for saving trained models')
     
     parser.add_argument('--use_pretrained', default=False, action='store_true')
-    parser.add_argument('--pretrained_encoder', type=str, default='./trained_weights/encoder-15-900.pkl')
-    parser.add_argument('--pretrained_decoder', type=str, default='./trained_weights/decoder-15-900.pkl')
+    parser.add_argument('--pretrained_encoder', type=str, default='./trained_weights/strict512/encoder-20-200.pkl')
+    parser.add_argument('--pretrained_decoder', type=str, default='./trained_weights/strict512/decoder-20-200.pkl')
+    parser.add_argument('--pretrained_est_encoder', type=str, default='./trained_weights/est_encoder-15-900.pkl')
     parser.add_argument('--pretrained_estimator', type=str, default='./trained_weights/estimator-15-900.pkl')
     
     parser.add_argument('--crop_size', type=int, default=224 ,
@@ -222,7 +239,7 @@ if __name__ == '__main__':
                         help='number of layers in lstm')
     
     parser.add_argument('--num_epochs', type=int, default=20)
-    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--batch_size', type=int, default=2)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--learning_rate', type=float, default=0.001)
     parser.add_argument('--use_policy', default=False, action='store_true')
